@@ -24,6 +24,7 @@
     "api:doctor": "node slack-api-doctor.cjs",
     "api:me": "node slack-api-me.cjs",
     "api:search": "node slack-api-search.cjs",
+    "api:bookmarks": "node slack-api-bookmark.cjs",
     "api:read": "node slack-api-read.cjs",
     "api:channel": "node slack-api-channel.cjs",
     "api:dm": "node slack-api-dm.cjs",

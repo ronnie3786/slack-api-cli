@@ -28,6 +28,11 @@ const COMMANDS = {
     summary: "Search Slack messages.",
     aliases: ["query"],
   },
+  bookmarks: {
+    script: "slack-api-bookmark.cjs",
+    summary: "List your bookmarked messages.",
+    aliases: ["saved", "starred"],
+  },
   read: {
     script: "slack-api-read.cjs",
     summary: "Read a Slack message or thread.",
@@ -121,6 +126,7 @@ Commands:
   doctor     ${COMMANDS.doctor.summary}
   whoami     ${COMMANDS.me.summary} Alias: me
   search     ${COMMANDS.search.summary}
+  bookmarks  ${COMMANDS.bookmarks.summary}
   read       ${COMMANDS.read.summary} Alias: thread
   channel    ${COMMANDS.channel.summary}
   dm         ${COMMANDS.dm.summary} Alias: im
@@ -146,6 +152,7 @@ Examples:
   ${cli} doctor
   ${cli} doctor --json
   ${cli} search --query "customer escalation" --since 5m
+  ${cli} bookmarks --limit 50 --include-text
   ${cli} dm history --user "Alice Smith" --include-text
   ${cli} read --link 'https://example.slack.com/archives/C0123456789/p1778784641394639'
   ${cli} send --channel '#general' --message 'Thanks'
@@ -170,7 +177,7 @@ NPM equivalent:
 Credential model:
   - This CLI does not use an official Slack app token or OAuth token.
   - Run ${cli} setup once to save your Slack workspace URL and extract Slack's browser API token plus cookies from a signed-in browser session.
-  - Normal whoami/search/read/channel/dm/user/file/send/draft create/draft info/emoji/react/reply/session commands use the private auth cache and do not launch Chromium.
+  - Normal whoami/search/bookmarks/read/channel/dm/user/file/send/draft create/draft info/emoji/react/reply/session commands use the private auth cache and do not launch Chromium.
   - If the user asks for conversation history with a person, prefer ${cli} dm history --user "Full Name" --include-text.
   - draft delete intentionally launches Chromium to drive Slack's Drafts & sent UI because direct drafts.delete returns team_is_restricted.
   - It does not print token or cookie values.
@@ -225,6 +232,13 @@ Commands:
       ${cli} search --query "incident review" --any-author --count 50 --since 5m --include-snippets
       ${cli} search --raw-query 'from:<@U123456> "customer escalation"' --include-snippets
       ${cli} search --query deploy --count 50 --after 2026-05-13 --before 2026-05-15
+
+  bookmarks
+    List your personal bookmarked messages. Message text is redacted by default.
+    Archived messages are excluded by default; add --include-archived to show them.
+    Examples:
+      ${cli} bookmarks
+      ${cli} saved --limit 50 --include-text
 
   read
     Read a message or thread. Prefer --link with a Slack permalink.
@@ -376,7 +390,7 @@ Operational notes:
   - Browser refresh may require elevated execution in Codex on macOS due Chromium sandbox/session restrictions.
   - Slack API network calls may also need elevated execution in Codex. Approve the broad slack-api prefix so all subcommands work.
   - If cached auth is missing or rejected, run ${cli} setup or ${cli} auth --refresh --headed once outside the sandbox, then retry.
-  - Existing lower-level scripts still work: npm run api:auth, api:me, api:search, api:read, api:channel, api:dm, api:user, api:file, api:send, api:draft, api:emoji, api:reply, api:react, api:session.
+  - Existing lower-level scripts still work: npm run api:auth, api:me, api:search, api:bookmarks, api:read, api:channel, api:dm, api:user, api:file, api:send, api:draft, api:emoji, api:reply, api:react, api:session.
 `);
 }
 

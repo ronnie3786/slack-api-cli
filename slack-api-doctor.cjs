@@ -24,6 +24,7 @@ const REQUIRED_COMMAND_SCRIPTS = [
   "slack-api-auth.cjs",
   "slack-api-me.cjs",
   "slack-api-search.cjs",
+  "slack-api-bookmark.cjs",
   "slack-api-read.cjs",
   "slack-api-channel.cjs",
   "slack-api-dm.cjs",

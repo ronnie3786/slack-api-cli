@@ -2,6 +2,13 @@
 
 ## [0.2.0] - 2026-08-24
 
+### New: Bookmarks listing (`bookmarks`)
+
+- List your personal bookmarked messages.
+- Message text is redacted by default; `--include-text` opts in.
+- Archived (completed) items are excluded by default; `--include-archived` shows them.
+- Aliases: `saved`, `starred`.
+
 ### New: Slack unread scanning (`mark-read`)
 
 - Fully scan unread conversation and DM history without mutating Slack.

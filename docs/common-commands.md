@@ -48,6 +48,16 @@ slack-api thread --link 'https://example.slack.com/archives/C0123456789/p1778784
 `slack-api read --link` is the canonical way to inspect a bound agent-session
 thread.
 
+## Bookmarks
+
+List your bookmarked messages. Message text is redacted by default:
+
+```sh
+slack-api bookmarks
+slack-api saved --limit 50 --include-text
+slack-api bookmarks --include-archived
+```
+
 ## Direct Messages
 
 Read your 1:1 DM history with a user:

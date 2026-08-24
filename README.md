@@ -64,6 +64,13 @@ Search recent messages:
 slack-api search --query "customer escalation" --since 5m
 ```
 
+List your bookmarked messages:
+
+```sh
+slack-api bookmarks --limit 50 --include-text
+slack-api bookmarks --include-archived
+```
+
 Read your 1:1 DM history with a person:
 
 ```sh
