@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-08-25
 
 ### New: Bookmarks (`bookmarks`)
 
@@ -10,6 +10,8 @@
 - `bookmarks add <permalink>` saves a message to Later; `bookmarks remove <permalink>` unsaves it. Both accept a permalink positionally or via `--link` (or `--channel` + `--ts`), and `--dry-run` previews without changing anything. Idempotent: re-saving and removing a never-saved item both succeed.
 - Aliases: `saved`, `starred`.
 - On Enterprise Grid, saved-* calls route through the organization host (`<team>.enterprise.slack.com`) using the enterprise session token captured by `slack-api auth --refresh`, so bookmarks works with an organization-scoped session.
+
+## [0.2.0] - 2026-08-24
 
 ### New: Slack unread scanning (`mark-read`)
 

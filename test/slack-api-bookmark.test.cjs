@@ -559,6 +559,7 @@ test("bookmarks add accepts the permalink after flags", () => {
 
   assert.equal(parsed.action, "add");
   assert.equal(parsed.dryRun, true);
+  assert.equal(parsed.workspace, "https://example.slack.com");
   assert.equal(parsed.channel, "C0123456789");
   assert.equal(parsed.ts, "1778784641.394639");
 });

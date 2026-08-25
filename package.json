@@ -1,6 +1,6 @@
 {
   "name": "slack-api-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local Slack CLI that reuses a signed-in browser session for search, read, unread scanning, doctor audits, and dry-run-safe message workflows.",
   "license": "MIT",
   "repository": {

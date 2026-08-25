@@ -68,6 +68,7 @@ function parseArgs(argv) {
   if (args.action !== "list") {
     if (args.link) {
       const target = parsePermalink(args.link);
+      if (!args.workspace) args.workspace = new URL(args.link).origin;
       args.channel = target.channelId;
       args.ts = target.messageTs;
     }

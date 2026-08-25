@@ -4,6 +4,14 @@ A local Slack CLI for fast terminal workflows against the Slack workspace you al
 
 This project does not create a Slack app and does not use Slack OAuth. It opens a local browser profile, lets you sign in to Slack normally, extracts the browser session token and cookies, and stores them in a private local auth cache.
 
+## What's New in v0.3.0
+
+- **Slack Later bookmarks (`bookmarks`)**: List active, completed, or archived Saved for Later messages while keeping text redacted by default.
+- **Save and unsave actions**: Add a message to Later or remove it by permalink, with dry-run previews and idempotent behavior.
+- **Enterprise Grid routing**: Use the organization-scoped browser session for saved-item calls when a workspace-scoped session is rejected.
+- **Reliable automation**: Bounded hydration, rate-limit retries, pagination guardrails, canonical thread-reply links, and nonzero exits for incomplete results.
+- **Command aliases**: Use `saved` or `starred` anywhere you would use `bookmarks`.
+
 ## What's New in v0.2.0
 
 - **Slack unread scanning (`mark-read`)** — Fully scan unread conversation history without mutating Slack. Filter out muted conversations with `--exclude-muted`, keep priority channels with `--priority`, and mark one channel as read through an exact timestamp with `--mark`.
