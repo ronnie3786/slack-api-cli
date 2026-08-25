@@ -235,7 +235,9 @@ Commands:
 
   bookmarks
     List your personal bookmarked messages. Message text is redacted by default.
-    Archived messages are excluded by default; add --include-archived to show them.
+    Completed and archived Later messages are excluded by default.
+    Add --include-archived to read all three Later buckets.
+    Enterprise Grid may require an organization-scoped browser session.
     Examples:
       ${cli} bookmarks
       ${cli} saved --limit 50 --include-text

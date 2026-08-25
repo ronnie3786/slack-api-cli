@@ -50,13 +50,23 @@ thread.
 
 ## Bookmarks
 
-List your bookmarked messages. Message text is redacted by default:
+List active messages from Slack Later. Message text is redacted by default:
 
 ```sh
 slack-api bookmarks
 slack-api saved --limit 50 --include-text
 slack-api bookmarks --include-archived
 ```
+
+`--include-archived` also reads Slack's completed and archived Later buckets.
+Use `--max-pages` to cap pagination. Any incomplete result exits nonzero. An
+inaccessible individual message remains in the result with a `messageError`, so
+successful items are not discarded.
+
+On Enterprise Grid, `saved.list` can require an organization-scoped browser
+session even when ordinary workspace API calls succeed. A
+`team_is_restricted` or `enterprise_is_restricted` result is a routing or policy
+failure, not proof that the Later list is empty.
 
 ## Direct Messages
 

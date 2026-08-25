@@ -71,6 +71,12 @@ slack-api bookmarks --limit 50 --include-text
 slack-api bookmarks --include-archived
 ```
 
+The default lists active Slack Later items and redacts message text. The
+`--include-archived` option also reads completed and archived Later buckets.
+On Enterprise Grid, Slack may require an organization-scoped browser session
+for this private endpoint; the command reports that policy error instead of
+mistaking it for an empty list.
+
 Read your 1:1 DM history with a person:
 
 ```sh
