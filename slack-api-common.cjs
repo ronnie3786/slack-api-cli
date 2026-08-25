@@ -234,6 +234,12 @@ function workspaceOrigin(workspace) {
   return new URL(workspace).origin;
 }
 
+function enterpriseOrigin(workspace) {
+  const url = new URL(workspace);
+  const team = url.hostname.replace(/\.slack\.com$/i, "");
+  return `https://${team}.enterprise.slack.com`;
+}
+
 function isSlackClientPath(href) {
   try {
     const url = new URL(href);
@@ -284,7 +290,7 @@ async function reloadWithTransientRetry(page, fallbackUrl, options) {
   }
 }
 
-async function browserAuthFromContext(args, context, page, token) {
+async function browserAuthFromContext(args, context, page, token, state = {}) {
   const cookies = await context.cookies([workspaceOrigin(args.workspace), "https://app.slack.com"]);
   const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
   return {
@@ -294,6 +300,8 @@ async function browserAuthFromContext(args, context, page, token) {
     tokenLength: token.length,
     pageUrl: page.url(),
     source: "browser",
+    enterpriseToken: state.enterpriseToken || null,
+    enterpriseId: state.enterpriseId || null,
   };
 }
 
@@ -337,6 +345,7 @@ async function loadBrowserAuth(args) {
           const text = document.body?.innerText || "";
           const bootData = window.TS?.boot_data || window.boot_data || {};
           const tokenValue = bootData.api_token || "";
+          const enterpriseTokenValue = bootData.enterprise_api_token || "";
           const userId = bootData.user_id || bootData.self?.id || "";
           const teamId = bootData.team_id || bootData.team?.id || "";
           const hasLoginText = /sign in|continue|magic code|password|two-factor|2fa|single sign-on|sso/i.test(text);
@@ -346,6 +355,8 @@ async function loadBrowserAuth(args) {
             text,
             hasToken: Boolean(tokenValue),
             token: tokenValue,
+            enterpriseToken: enterpriseTokenValue || null,
+            enterpriseId: bootData.enterprise_id || bootData.enterprise?.id || null,
             hasLoginText,
             hasUser: Boolean(userId),
             hasTeam: Boolean(teamId),
@@ -370,7 +381,7 @@ async function loadBrowserAuth(args) {
 
       if (appearsSignedIn && Date.now() - lastAuthTestAt > 1_000) {
         lastAuthTestAt = Date.now();
-        const candidateAuth = await browserAuthFromContext(args, context, page, state.token);
+        const candidateAuth = await browserAuthFromContext(args, context, page, state.token, state);
         if (await isBrowserAuthValid(args, candidateAuth)) {
           auth = candidateAuth;
           break;
@@ -435,6 +446,8 @@ async function loadCachedAuth(args) {
     cachePath: args.authCache,
     cachedAt: cached.cachedAt || null,
     cacheAgeMs,
+    enterpriseToken: cached.enterpriseToken || null,
+    enterpriseId: cached.enterpriseId || null,
   };
 }
 
@@ -450,6 +463,8 @@ async function saveAuthCache(args, auth) {
     cookieCount: auth.cookieCount,
     tokenLength: auth.tokenLength,
     pageUrl: auth.pageUrl,
+    enterpriseToken: auth.enterpriseToken || null,
+    enterpriseId: auth.enterpriseId || null,
     cachedAt: new Date().toISOString(),
   };
 
@@ -569,12 +584,16 @@ function throwSlackRequestFailure(error, args, request) {
 async function slackApiCall(args, method, params = {}) {
   const auth = args.auth || await loadAuth(args);
   const workspace = args.workspace || auth.workspace;
-  const body = new URLSearchParams({ token: auth.token, ...cleanParams(params) });
+  const useEnterprise = Boolean(args.enterprise) && Boolean(auth.enterpriseToken);
+  const body = new URLSearchParams({
+    token: useEnterprise ? auth.enterpriseToken : auth.token,
+    ...cleanParams(params),
+  });
   const request = slackRequestSignal(args);
   let response;
   let json;
   try {
-    response = await fetch(`${workspaceOrigin(workspace)}/api/${method}`, {
+    response = await fetch(`${useEnterprise ? enterpriseOrigin(workspace) : workspaceOrigin(workspace)}/api/${method}`, {
       method: "POST",
       headers: {
         "content-type": "application/x-www-form-urlencoded",
@@ -1082,4 +1101,5 @@ module.exports = {
   summarizeMessage,
   summarizeUser,
   workspaceOrigin,
+  enterpriseOrigin,
 };

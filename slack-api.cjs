@@ -30,7 +30,7 @@ const COMMANDS = {
   },
   bookmarks: {
     script: "slack-api-bookmark.cjs",
-    summary: "List your bookmarked messages.",
+    summary: "List, save, or unsave your Later bookmarks.",
     aliases: ["saved", "starred"],
   },
   read: {
@@ -234,13 +234,18 @@ Commands:
       ${cli} search --query deploy --count 50 --after 2026-05-13 --before 2026-05-15
 
   bookmarks
-    List your personal bookmarked messages. Message text is redacted by default.
+    List your personal Later bookmarks. Message text is redacted by default.
     Completed and archived Later messages are excluded by default.
     Add --include-archived to read all three Later buckets.
-    Enterprise Grid may require an organization-scoped browser session.
+    Save or unsave a message by permalink:
+      ${cli} bookmarks add <permalink>
+      ${cli} bookmarks remove <permalink>
+    On Enterprise Grid this uses the enterprise session token captured by
+    slack-api auth --refresh; run that once after setup.
     Examples:
       ${cli} bookmarks
       ${cli} saved --limit 50 --include-text
+      ${cli} bookmarks add https://example.slack.com/archives/C0123456789/p1778784641394639
 
   read
     Read a message or thread. Prefer --link with a Slack permalink.

@@ -5,6 +5,7 @@ const {
   exitCodeForOutput,
   fetchSavedItems,
   isHistoricalSavedItem,
+  main,
   parseArgs,
   run,
   savedFilters,
@@ -196,7 +197,7 @@ test("Enterprise policy failures include an org-session routing hint", async () 
     slackApiCall: async () => response({ ok: false, error: "team_is_restricted" }),
   });
 
-  assert.match(output.errorHint, /organization-scoped browser session/);
+  assert.match(output.errorHint, /slack-api auth --refresh/);
   assert.equal(exitCodeForOutput(output), 1);
 });
 
@@ -406,4 +407,181 @@ test("a per-item hydration failure remains visible without discarding the list",
 test("argument parsing accepts a page cap and rejects invalid values", () => {
   assert.equal(parseArgs(["--max-pages", "4"]).maxPages, 4);
   assert.throws(() => parseArgs(["--max-pages", "0"]), /--max-pages must be an integer >= 1/);
+});
+
+test("saved.list is routed through the enterprise host when an enterprise token is cached", async () => {
+  const calls = [];
+  const output = await run(args({ limit: 1, auth: { enterpriseToken: "xoxc-enterprise" } }), {
+    slackApiCall: async (callArgs, method, params) => {
+      calls.push({ enterprise: callArgs.enterprise, method });
+      if (method === "saved.list") return response({ ok: true, saved_items: [savedItem()] });
+      return response({ ok: true, messages: [{ ts: params.latest, user: "U123", text: "x" }] });
+    },
+  });
+
+  assert.deepEqual(calls, [
+    { enterprise: true, method: "saved.list" },
+    { enterprise: undefined, method: "conversations.history" },
+  ]);
+  assert.equal(output.ok, true);
+  assert.equal(output.resultCount, 1);
+});
+
+test("restricted saved.list without an enterprise token suggests refreshing auth", async () => {
+  const output = await run(args(), {
+    slackApiCall: async () => response({ ok: false, error: "team_is_restricted" }),
+  });
+
+  assert.match(output.errorHint, /slack-api auth --refresh/);
+  assert.equal(exitCodeForOutput(output), 1);
+});
+
+test("bookmarks add parses a permalink and calls saved.add via the enterprise route", async () => {
+  const calls = [];
+  const output = await main(
+    ["add", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async (callArgs, method, params) => {
+        calls.push({ enterprise: callArgs.enterprise, method, params });
+        return {
+          response: { status: 200 },
+          json: { ok: true, item: { item_id: "C0123456789", ts: "1778784641.394639", state: "in_progress" } },
+        };
+      },
+    },
+  );
+
+  assert.deepEqual(calls, [{
+    enterprise: true,
+    method: "saved.add",
+    params: { item_id: "C0123456789", item_type: "message", ts: "1778784641.394639" },
+  }]);
+  assert.equal(output.ok, true);
+  assert.equal(output.action, "add");
+  assert.equal(output.channelId, "C0123456789");
+  assert.equal(output.ts, "1778784641.394639");
+  assert.equal(output.planned, false);
+});
+
+test("bookmarks remove calls saved.delete via the enterprise route", async () => {
+  const calls = [];
+  const output = await main(
+    ["remove", "--link", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async (callArgs, method, params) => {
+        calls.push({ enterprise: callArgs.enterprise, method, params });
+        return { response: { status: 200 }, json: { ok: true } };
+      },
+    },
+  );
+
+  assert.deepEqual(calls, [{
+    enterprise: true,
+    method: "saved.delete",
+    params: { item_id: "C0123456789", item_type: "message", ts: "1778784641.394639" },
+  }]);
+  assert.equal(output.ok, true);
+  assert.equal(output.action, "remove");
+});
+
+test("bookmarks add --dry-run reports a planned save without calling the API", async () => {
+  let called = false;
+  const output = await main(
+    ["add", "--dry-run", "--link", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async () => { called = true; },
+    },
+  );
+
+  assert.equal(called, false);
+  assert.equal(output.ok, true);
+  assert.equal(output.planned, true);
+  assert.equal(output.dryRun, true);
+});
+
+test("bookmarks rejects an unknown action", () => {
+  assert.throws(
+    () => parseArgs(["frobnicate", "https://example.slack.com/archives/C0123456789/p1778784641394639"]),
+    /Unknown bookmarks action: frobnicate/,
+  );
+});
+
+test("bookmarks add treats already_saved as success (idempotent)", async () => {
+  const output = await main(
+    ["add", "--link", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async () => ({ response: { status: 200 }, json: { ok: false, error: "already_saved" } }),
+    },
+  );
+
+  assert.equal(output.ok, true);
+  assert.equal(output.already, true);
+});
+
+test("bookmarks remove succeeds even for a never-saved message (saved.delete is unconditional)", async () => {
+  const output = await main(
+    ["remove", "--link", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async () => ({ response: { status: 200 }, json: { ok: true } }),
+    },
+  );
+
+  assert.equal(output.ok, true);
+  assert.equal(output.action, "remove");
+});
+
+test("bookmarks add surfaces a non-idempotent failure", async () => {
+  const output = await main(
+    ["add", "--link", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async () => ({ response: { status: 200 }, json: { ok: false, error: "team_is_restricted" } }),
+    },
+  );
+
+  assert.equal(output.ok, false);
+  assert.equal(output.error, "team_is_restricted");
+  assert.match(output.errorHint, /slack-api auth --refresh/);
+  assert.equal(exitCodeForOutput(output), 1);
+});
+
+test("bookmarks add accepts the permalink after flags", () => {
+  const parsed = parseArgs([
+    "add",
+    "--dry-run",
+    "https://example.slack.com/archives/C0123456789/p1778784641394639",
+  ]);
+
+  assert.equal(parsed.action, "add");
+  assert.equal(parsed.dryRun, true);
+  assert.equal(parsed.channel, "C0123456789");
+  assert.equal(parsed.ts, "1778784641.394639");
+});
+
+test("bookmarks rejects a second positional permalink", () => {
+  assert.throws(
+    () => parseArgs([
+      "add",
+      "https://example.slack.com/archives/C0123456789/p1778784641394639",
+      "https://example.slack.com/archives/C0123456789/p1778784641567890",
+    ]),
+    /Unexpected extra argument/,
+  );
+});
+
+test("bookmarks add restriction hint names the failing method", async () => {
+  const output = await main(
+    ["add", "https://example.slack.com/archives/C0123456789/p1778784641394639"],
+    {
+      loadAuth: async () => ({ source: "cache", enterpriseToken: "xoxc-enterprise" }),
+      slackApiCall: async () => ({ response: { status: 200 }, json: { ok: false, error: "team_is_restricted" } }),
+    },
+  );
+
+  assert.match(output.errorHint, /saved\.add was rejected on the enterprise host/);
 });

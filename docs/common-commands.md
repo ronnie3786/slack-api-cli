@@ -50,12 +50,14 @@ thread.
 
 ## Bookmarks
 
-List active messages from Slack Later. Message text is redacted by default:
+List, save, or unsave messages from Slack Later. Message text is redacted by default:
 
 ```sh
 slack-api bookmarks
 slack-api saved --limit 50 --include-text
 slack-api bookmarks --include-archived
+slack-api bookmarks add https://example.slack.com/archives/C0123456789/p1778784641394639
+slack-api bookmarks remove https://example.slack.com/archives/C0123456789/p1778784641394639
 ```
 
 `--include-archived` also reads Slack's completed and archived Later buckets.
@@ -63,10 +65,17 @@ Use `--max-pages` to cap pagination. Any incomplete result exits nonzero. An
 inaccessible individual message remains in the result with a `messageError`, so
 successful items are not discarded.
 
-On Enterprise Grid, `saved.list` can require an organization-scoped browser
-session even when ordinary workspace API calls succeed. A
-`team_is_restricted` or `enterprise_is_restricted` result is a routing or policy
-failure, not proof that the Later list is empty.
+`add <permalink>` saves a message to Later and `remove <permalink>` unsaves it.
+Both accept the permalink positionally or via `--link` (or `--channel` + `--ts`
+directly), and `--dry-run` previews the mutation without changing anything.
+Saving an already-saved message and removing a message that isn't saved are both
+treated as success, so the commands are idempotent.
+
+On Enterprise Grid, `bookmarks` routes the `saved.list` / `saved.add` /
+`saved.delete` calls through the organization host (`<team>.enterprise.slack.com`)
+using the enterprise session token captured by `slack-api auth --refresh`. Run
+that once after setup on Enterprise Grid; a `team_is_restricted` result after
+that is a policy failure, not proof that the Later list is empty.
 
 ## Direct Messages
 

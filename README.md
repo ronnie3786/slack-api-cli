@@ -64,18 +64,22 @@ Search recent messages:
 slack-api search --query "customer escalation" --since 5m
 ```
 
-List your bookmarked messages:
+List, save, or unsave your bookmarked messages:
 
 ```sh
 slack-api bookmarks --limit 50 --include-text
 slack-api bookmarks --include-archived
+slack-api bookmarks add https://example.slack.com/archives/C0123456789/p1778784641394639
+slack-api bookmarks remove https://example.slack.com/archives/C0123456789/p1778784641394639
 ```
 
 The default lists active Slack Later items and redacts message text. The
 `--include-archived` option also reads completed and archived Later buckets.
-On Enterprise Grid, Slack may require an organization-scoped browser session
-for this private endpoint; the command reports that policy error instead of
-mistaking it for an empty list.
+`add` saves a message to Later and `remove` unsaves it (both accept a permalink
+or `--link`). On Enterprise Grid the command routes the saved-* calls through
+the organization host with the enterprise session token captured by
+`slack-api auth --refresh`; run that once after setup so bookmarks is not
+rejected as workspace-scoped.
 
 Read your 1:1 DM history with a person:
 

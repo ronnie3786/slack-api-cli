@@ -11,14 +11,31 @@ const {
 
 const DEFAULT_HYDRATION_CONCURRENCY = 4;
 const SAVED_FILTERS = ["saved", "completed", "archived"];
+const BOOKMARK_ACTIONS = new Set(["add", "remove"]);
 
 function parseArgs(argv) {
   const { args, remaining } = parseCommonArgs(argv, {
+    action: "list",
+    link: "",
+    channel: "",
+    ts: "",
+    dryRun: false,
     limit: 100,
     maxPages: 20,
     includeText: false,
     includeArchived: false,
   });
+
+  if (remaining[0] && !remaining[0].startsWith("-")) {
+    const rawAction = remaining.shift();
+    if (!BOOKMARK_ACTIONS.has(rawAction)) {
+      throw new Error(`Unknown bookmarks action: ${rawAction}. Use \`add <permalink>\` or \`remove <permalink>\`.`);
+    }
+    args.action = rawAction;
+    if (remaining[0] && !remaining[0].startsWith("-")) {
+      args.link = remaining.shift();
+    }
+  }
 
   for (let index = 0; index < remaining.length; index += 1) {
     const arg = remaining[index];
@@ -28,7 +45,11 @@ function parseArgs(argv) {
       return remaining[index];
     };
 
-    if (arg === "--limit") args.limit = parsePositiveInt(next(), "--limit");
+    if (arg === "--link") args.link = next();
+    else if (arg === "--channel") args.channel = next();
+    else if (arg === "--ts") args.ts = next();
+    else if (arg === "--dry-run") args.dryRun = true;
+    else if (arg === "--limit") args.limit = parsePositiveInt(next(), "--limit");
     else if (arg === "--max-pages") args.maxPages = parsePositiveInt(next(), "--max-pages");
     else if (arg === "--include-text") args.includeText = true;
     else if (arg === "--redact-text") args.includeText = false;
@@ -36,9 +57,22 @@ function parseArgs(argv) {
     else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
+    } else if (!arg.startsWith("-") && args.action !== "list") {
+      if (args.link) throw new Error(`Unexpected extra argument: ${arg}`);
+      args.link = arg;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+
+  if (args.action !== "list") {
+    if (args.link) {
+      const target = parsePermalink(args.link);
+      args.channel = target.channelId;
+      args.ts = target.messageTs;
+    }
+    if (!args.channel) throw new Error("--link or --channel is required");
+    if (!args.ts) throw new Error("--link or --ts is required");
   }
 
   return args;
@@ -49,13 +83,28 @@ function printHelp() {
 Usage:
   slack-api bookmarks
   slack-api bookmarks --limit 50 --include-text
+  slack-api bookmarks add <permalink>
+  slack-api bookmarks remove <permalink>
 
-Options:
+Actions:
+  (none)             List your saved Later messages. Default
+  add <permalink>    Save a message to Later (bookmark it)
+  remove <permalink> Unsave a message from Later
+
+List options:
   --limit N          Maximum bookmarked messages to return. Default: 100
   --max-pages N      Maximum saved-list pages to read. Default: 20
   --include-text     Include bookmarked message text
   --redact-text      Redact bookmarked message text. Default
   --include-archived Include completed and archived Later messages
+
+add/remove options:
+  --link <permalink> Permalink of the message to save/unsave (or pass it positionally)
+  --channel <id>     Channel ID instead of a permalink
+  --ts <ts>          Message timestamp instead of a permalink
+  --dry-run          Show what would happen without saving/unsaving
+
+Common:
   --workspace URL    Slack workspace URL
   --auth-cache FILE  Auth cache path
   --refresh-auth     Refresh auth from browser profile first
@@ -245,7 +294,7 @@ async function fetchSavedItems(args, call) {
       result.pageCount += 1;
       let page;
       try {
-        page = await call(args, "saved.list", {
+        page = await call({ ...args, enterprise: true }, "saved.list", {
           filter,
           include_tombstones: true,
           limit: Math.min(args.limit - result.items.length, 50),
@@ -386,9 +435,12 @@ async function mapWithConcurrency(items, concurrency, mapper) {
   return results;
 }
 
-function enterpriseSavedListHint(error) {
+function enterpriseSavedHint(error, args, method = "saved.list") {
   if (!/^(?:enterprise|team)_is_restricted$/.test(String(error || ""))) return null;
-  return "On Enterprise Grid, saved.list requires an organization-scoped browser session; a workspace-scoped cache can be rejected even when other Slack API commands work.";
+  if (args?.auth?.enterpriseToken) {
+    return `${method} was rejected on the enterprise host. Re-run with \`slack-api auth --refresh\` to refresh the enterprise session, then retry bookmarks.`;
+  }
+  return `${method} is restricted on Enterprise Grid without an organization-scoped session. Re-run \`slack-api auth --refresh\` once (this captures the enterprise token), then retry bookmarks.`;
 }
 
 async function run(args, dependencies = {}) {
@@ -400,7 +452,7 @@ async function run(args, dependencies = {}) {
       complete: listed.complete,
       status: listed.status,
       error: listed.error,
-      errorHint: enterpriseSavedListHint(listed.error),
+      errorHint: enterpriseSavedHint(listed.error, args),
       authSource: listed.authSource,
       authHint: listed.authHint,
       includeText: args.includeText,
@@ -467,6 +519,66 @@ async function run(args, dependencies = {}) {
   };
 }
 
+function savedMutationOutput(args, plannedAction) {
+  const { channel, ts } = args;
+  return {
+    ok: false,
+    complete: false,
+    action: plannedAction,
+    channelId: channel,
+    ts,
+    permalink: permalinkFor(args.workspace, channel, ts),
+    planned: true,
+    dryRun: Boolean(args.dryRun),
+    status: null,
+    error: null,
+    errorHint: null,
+    authSource: args.auth?.source || null,
+    authHint: null,
+    item: null,
+  };
+}
+
+async function mutateSavedItem(args, method, plannedAction, dependencies = {}) {
+  const call = dependencies.slackApiCall || slackApiCall;
+  const output = savedMutationOutput(args, plannedAction);
+  if (args.dryRun) {
+    return {
+      ...output,
+      ok: true,
+      complete: true,
+      planned: true,
+      message: `${plannedAction === "add" ? "Would save" : "Would unsave"} message ${args.channel}/${args.ts}`,
+    };
+  }
+
+  const params = {
+    item_id: args.channel,
+    item_type: "message",
+    ts: args.ts,
+  };
+  const { response, json } = await call({ ...args, enterprise: true }, method, params);
+  const already = json?.error === "already_saved" || json?.error === "saved_item_exists";
+  const jsonOk = Boolean(json?.ok);
+  // saved.delete returns ok:true even when the item was never saved, so remove
+  // is unconditional; saved.add may flag an existing item as already_saved on
+  // some hosts, so treat that as success too.
+  const ok = jsonOk || (plannedAction === "add" ? already : false);
+  return {
+    ...output,
+    ok,
+    complete: ok,
+    planned: false,
+    dryRun: false,
+    status: response?.status ?? null,
+    error: json?.error || null,
+    errorHint: enterpriseSavedHint(json?.error, args, method),
+    authHint: json?.authHint || null,
+    already: plannedAction === "add" ? already : null,
+    item: json?.item || null,
+  };
+}
+
 function exitCodeForOutput(output) {
   return output?.ok && output.complete ? 0 : 1;
 }
@@ -475,7 +587,15 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
   const args = parseArgs(argv);
   const authenticate = dependencies.loadAuth || loadAuth;
   args.auth = await authenticate(args);
-  const output = await run(args, dependencies);
+
+  let output;
+  if (args.action === "add") {
+    output = await mutateSavedItem(args, "saved.add", "add", dependencies);
+  } else if (args.action === "remove") {
+    output = await mutateSavedItem(args, "saved.delete", "remove", dependencies);
+  } else {
+    output = await run(args, dependencies);
+  }
   console.log(JSON.stringify(output, null, 2));
   return output;
 }
@@ -497,9 +617,11 @@ module.exports = {
   isResultMessage,
   main,
   mapWithConcurrency,
+  mutateSavedItem,
   parseArgs,
   run,
   savedFilters,
+  savedMutationOutput,
   summarizeItem,
   withRateLimitRetries,
 };
